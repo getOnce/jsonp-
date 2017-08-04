@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>jsonp</title>
+</head>
+<body>
+	<div id='js-box'>
+		jsonp封装
+	</div>
+	<script>
+	/**
+	*jsonp请求
+	*@param options {object}
+	*@param options.url {string} 请求地址
+	*@param options.data {object} 参数
+	*@param options.callback { string } callback的name	
+	*@param options.success {function} callback
+	*@param options.fail {function} 错误回调
+	*@param options.timeout {number} 超时时长
+	*/
+	var jsonp = (function(){
+		var _util = {
+			formateData : function(data){
+				var ary = [];
+				if(data){
+					for(var key in data){
+						ary.push({
+							name: key,
+							value: data[key]
+						})
+					}
+				}
+				return ary;
+			},
+			dataToString : function(key, value){
+				var ary = {};
+				if(typeof key === 'string'){
+					ary = {
+							name: key,
+							value: value
+						}
+				} else {
+					ary = key
+				}
+				return ary.name + '=' + ary.value;
+			},
+			datasToString : function(ary){
+				var ary = ary;
+				var newAry = ary.map(function(value, index, arr){
+					var str = _util.dataToString(value)
+					if(arr.indexOf(value) != arr.length - 1){
+						str += '&'
+					}
+					return str 
+				})
+				return newAry;
+			}
+		}
+
+		/**
+		*职责链
+		*/
+		var Chain = function(){
+			this.ary = [];
+		}
+		Chain.prototype.add = function(fn){
+			this.ary.push(fn);
+			return this;
+		}
+		Chain.prototype.start = function(args){
+			var me = this;
+			var next = function(){
+				var fn = me.ary.shift();
+				if(fn){
+					return fn(args, next);
+				}
+				return false;
+			}	
+			next();
+		}
+
+		/* 以下为职责链接供应 */
+		function checkUri(options, next){
+			if(!options.url){
+				throw new Error('请求地址错误!');
+				return 'error'
+			}
+			next();
+		}
+		function formatCallback(options, next){
+			if(!options.callback){
+				options.callback = 'topicHandler';
+			}
+			window[options.callback] = options.success;
+			next();
+		}
+		function formatData(options, next){
+			if(options.data){
+				options.data = (function(data){
+					return _util.datasToString( _util.formateData(data) ).join('')
+				})(options.data)
+			}
+			next();
+		}
+		function formateUri(options, next){
+			var ary = options.url.split('?');
+			options.url = ary[0];
+			if(ary[1] || options.url){
+				options.url += '?';
+			}
+			if(options.data){
+				options.url += options.data;
+			}
+			if(ary[1]){
+				options.url += ary[1];
+			}
+			next();
+		}
+		function createScript(options, next){
+			var oS = document.createElement('script'),
+				head = document.getElementsByTagName('head')[0];
+			head.appendChild(oS);
+			oS.src = options.url;
+			if(oS.onload){
+				oS.onload = function(){
+					head.removeChild(oS);
+					window[options.callback] = null;
+				}
+			}
+			//超时情况
+			if(options.timeout){
+				setTimeout(function(){
+					head.removeChild(oS);
+					window[options.callback] = null;
+					options.fail && options.fail({error_code: 1, result: 'error', data: {msg: '请求超时'}});
+				}, options.timeout)
+			}
+		}
+		/* 以下为职责链接供应 end*/
+
+		/**
+		*jsonp请求
+		*@param options {object}
+		*@param options.url {string} 请求地址
+		*@param options.data {object} 参数
+		*@param options.callback { string } callback的name	
+		*@param options.success {function} callback
+		*@param options.fail {function} 错误回调
+		*@param options.timeout {number} 超时时长
+		*/
+		function jsonp(options){
+			var opt = Object.assign({}, {
+				callback: 'topicHandler',
+				data: false
+			}, options );
+			var c = new Chain();
+			c
+				.add(checkUri)
+				.add(formatCallback)
+				.add(formatData)
+				.add(formateUri)
+				.add(createScript)
+				.start(opt);
+		}
+		return jsonp;
+	})()
+	
+	
+	
+	
+
+	jsonp({
+		url: 'http://www.qyer.com/a.js',
+		timeout: 100,
+		data: {
+			name: 11,
+			value: '中华人民共和国'
+		},
+		success: function(data){
+			setTimeout(function(){
+				console.log(data);
+			}, 3000)
+			
+		},
+		fail: function(){
+			alert('错误了')
+		}
+	})
+	</script>
+</body>
+</html>
